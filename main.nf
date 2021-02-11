@@ -88,5 +88,5 @@ workflow test {
     | combine([[rmd_template, rmd_css]]) \
     | take(5) \
     | RenderReport \
-    | view()
+    | view { run_id, report -> "Report rendered: $report (Run: $run_id)" }
 }
