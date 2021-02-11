@@ -6,6 +6,9 @@ output:
     css: "style.css"
     highlight: tango
     theme: flatly
+params:
+  commitid: "unknown"
+  version: "unknown"
 ---
 
 <style type="text/css">
@@ -194,12 +197,12 @@ column_definitions = list(
           span(class = "hit-count", match.1st[,3])
         ),
         div(
-          class="blast-top",
+          class="blast-other",
             span(class = "name", match.2nd[,2]),
           span(class = "hit-count", match.2nd[,3])
         ),
         div(
-          class="blast-top",
+          class="blast-other",
           span(class = "name", match.3rd[,2]),
           span(class = "hit-count", match.3rd[,3])
         )
@@ -235,3 +238,6 @@ table.data %>% reactable(
 kable(indexinfo, row.names = FALSE)
 ```
 
+## {#footer}
+
+This report rendered `r format(Sys.Date(), format="%B %d %Y")` using [c3g/runvalidation](https://github.com/c3g/runvalidation/blob/main/resources/report.Rmd) v`r params$version`, commit: `r params$printcode`

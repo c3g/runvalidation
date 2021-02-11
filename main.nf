@@ -30,7 +30,11 @@ process RenderReport {
       clean=FALSE,
       output_file="${run_id}.report.html", \
       output_dir=getwd(), \
-      knit_root_dir=getwd() \
+      knit_root_dir=getwd(), \
+      params=list( \
+          version = "$workflow.manifest.version", \
+          commitid = "$workflow.commitId" \
+      ) \
     )
     """
 }

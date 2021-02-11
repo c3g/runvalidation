@@ -53,3 +53,8 @@
 #index-metrics .table td {
 padding: 1px;
 }
+
+#footer {
+    font-size: small;
+    margin-top: 30px;
+}
