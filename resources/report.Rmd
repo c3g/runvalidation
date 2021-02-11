@@ -240,4 +240,4 @@ kable(indexinfo, row.names = FALSE)
 
 ## {#footer}
 
-This report rendered `r format(Sys.Date(), format="%B %d %Y")` using [c3g/runvalidation](https://github.com/c3g/runvalidation/blob/main/resources/report.Rmd) v`r params$version`, commit: `r params$commitid`
+This report rendered `r format(Sys.Date(), format="%B %d %Y")` using [c3g/runvalidation](https://github.com/c3g/runvalidation/blob/main/resources/report.Rmd) v`r params$version`, commit: [`r substr(params$commitid,1,6)`](https://github.com/c3g/runvalidation/commit/`r params$commitid`)
