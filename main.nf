@@ -9,10 +9,6 @@ def get_run_id(UnixPath path) {
     path.subpath(6,7)
 }
 
-def get_lane(UnixPath path) {
-    path.subpath(7,8)
-}
-
 process RenderReport {
     tag {run_id}
     cache 'deep'
@@ -56,7 +52,7 @@ process UploadRunReport {
 
 workflow {
     sample_sheets =  Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*_samples.txt") \
-    | map( it -> [it.subpath(6,7), it] )
+    | map( it -> [get_run_id(it), it] )
 
     run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
     | map( it -> [get_run_id(it), it] )
@@ -64,14 +60,29 @@ workflow {
     rmd_template = file(params.template)
     rmd_css = file(params.css)
 
-
-
-
-
     run_validations \
     | groupTuple() \
     | combine(sample_sheets, by: 0) \
     | combine([[rmd_template, rmd_css]]) \
     | RenderReport \
     | UploadRunReport
+}
+
+workflow test {
+    sample_sheets =  Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*_samples.txt") \
+    | map( it -> [get_run_id(it), it] )
+
+    run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
+    | map( it -> [get_run_id(it), it] )
+
+    rmd_template = file(params.template)
+    rmd_css = file(params.css)
+
+    run_validations \
+    | groupTuple() \
+    | combine(sample_sheets, by: 0) \
+    | combine([[rmd_template, rmd_css]]) \
+    | take(5) \
+    | RenderReport \
+    | view()
 }
