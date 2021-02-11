@@ -1,0 +1,237 @@
+---
+title: Run Report
+output:
+  html_document:
+    keep_md: yes
+    css: "style.css"
+    highlight: tango
+    theme: flatly
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(magrittr)
+library(reactable)
+library(htmltools)
+library(stringr)
+library(DT)
+library(jsonlite)
+library(DT)
+library(knitr)
+library(formattable)
+library(plotly)
+library(colorspace)
+library(sparkline)
+```
+
+```{r message=TRUE, warning=TRUE, include=FALSE}
+jsons <-
+  list.files(pattern = "*run_validation_report.json$",
+             recursive = T,
+             full.names = T) %>% lapply(read_json)
+
+eventfile <-
+  list.files(pattern = "*_samples.txt$",
+             recursive = T,
+             full.names = T) %>%
+  extract(1) %>%
+  read_tsv(na = "N/A") %>%
+  mutate(row = paste0(Index, "_lane", Position %>% gsub(":.*","",.))) %>%
+  column_to_rownames("row")
+
+runinfo <- tibble(
+  "Run"                 = jsons %>% map("run") %>% unique %>% paste(collapse = ","),
+  "Sequencing Type"     = jsons %>% map("seqtype") %>% unique %>% paste(collapse = ","),
+  "Flowcell"            = jsons %>% map("flowcell") %>% unique %>% paste(collapse=", "),
+	"Seq. Method"         = jsons %>% map("sequencing_method") %>% unique %>% paste(collapse=", "),
+	"Instrument"          = jsons %>% map("instrument") %>% unique %>% paste(collapse=", "),
+	"Total PF clusters(G)"= jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
+	"Spreads"             = jsons %>% map("spread")%>% unlist %>% round(2) %>% paste(collapse=", "),
+	"Project(s)"          = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% c %>% unique %>% paste(collapse = ",")
+	) %>% t %>% data.frame
+
+indexinfo <- lapply(jsons, function(x) {
+  lapply(x$barcodes, function(sample_lanes) {
+    seq_along(sample_lanes) %>% lapply(function(mgi_index_num) {
+      as_tibble(sample_lanes[[mgi_index_num]])
+    }) %>% do.call(what = rbind)
+  }) %>% do.call(what = rbind)
+}) %>% do.call(what=rbind)
+```
+
+```{r include=FALSE}
+rsmetrics = map(jsons,"run_validation")
+names(rsmetrics) = paste0("lane", map(jsons,"lane") )
+rsmetrics %<>% sapply(function(x) sapply(x,unlist,simplify=F),simplify=F) # yuck
+rsmetrics %<>% sapply(function(x) do.call(rbind,x),simplify=F) # yuck
+rsmetrics %<>% sapply(function(df) {data.frame(df,check.names=F)},simplify=F) # yuck
+rsmetrics %<>% mapply(function(df,lane) {df$lane=lane;df},.,names(.),SIMPLIFY=F) # yuck TODO: onot sure will work if alignment stats
+rsmetrics %<>% do.call(rbind,.)
+rownames(rsmetrics) = paste0(rsmetrics$"index.Barcode","_",rsmetrics$lane) # yuck # TODO: WHY MISSING S!!!
+rsmetrics %<>% type.convert(as.is=TRUE)
+rsmetrics %<>% cbind(eventfile[rownames(rsmetrics),])
+rsmetrics$"on_target" = ifelse(rsmetrics$"index.% of the lane"/100  >= 0.75*rsmetrics$"Pool Fraction","yes","no") # JUST a mock example of coloring...
+rsmetrics %<>% relocate(lane,project,SampleName,LibraryProcess,`index.PF Clusters`,on_target,Species,blast.1st_hit)
+rsmetrics$row=1:nrow(rsmetrics)
+```
+
+
+```{r include=FALSE}
+pfreads_plot = ggplot(rsmetrics, aes(y = `index.PF Clusters` / 1e6, x = row)) +
+  geom_point(aes(color = lane, label = SampleName)) +
+  geom_line(color = "black",
+            linetype = "dashed",
+            alpha = 0.5) +
+  ylab("Million Clusters") +
+  ylim(c(0, max(rsmetrics$"index.PF Clusters" / 1e6)))
+```
+
+## Run Processing Report {.tabset}
+
+### Run Metrics
+
+```{r echo=F, fig.dim=c(8, 3), messages=F, warnings=F}
+kable(runinfo, col.names = c("",NULL))
+pfreads_plot %>% ggplotly
+```
+
+```{r echo=FALSE}
+clusters_bulletgraph <- function(expected, observed, max) {
+  sparkline(c(expected,observed,max,0,0), type = "bullet")
+}
+
+rsmetrics %>%
+  group_by(lane) %>%
+  mutate(index.expected = sum(`index.PF Clusters`) / n(),
+         index.max.per.lane = max(`index.PF Clusters`),
+         samples.per.lane = n(),
+         ) %>%
+  ungroup() %>%
+  mutate(
+    clusters.for.sparkline = mapply(function(obs, exp, max1, max2) { list(exp=exp, obs=obs, max.per.lane=max1, max.overall=max2)}, `index.PF Clusters`, index.expected, index.max.per.lane, rep(max(`index.PF Clusters`), n()), SIMPLIFY = FALSE),
+    `index.% on index in lane` = `index.% on index in lane` %>% sprintf(fmt = "%.1f"),
+    `index.% of the lane` = `index.% of the lane` %>% sprintf(fmt = "%.1f"),
+    lane.composition.list = mapply(function(percentage, samples.per.lane) {list(percentage = percentage, samples.per.lane = samples.per.lane)}, `index.% on index in lane`, samples.per.lane, SIMPLIFY = FALSE),
+    lane = gsub("lane", "Lane ", lane),
+  ) %>%
+  select(
+    "Lane"                 = lane,
+    "Sample name"          = SampleName,
+    "Clusters Graph"       = clusters.for.sparkline,
+    "Clusters"             = `index.PF Clusters`,
+    "Lane composition"     = lane.composition.list,
+    "Project"              = project,
+    "Library process"      = LibraryProcess,
+    "Expected species"     = Species,
+    "Blast - 1st hit"      = blast.1st_hit,
+    "Blast - 2nd hit"      = blast.2nd_hit,
+    "Blast - 3rd hit"      = blast.3rd_hit,
+  ) -> table.data
+
+column_definitions = list(
+  "Sample name" = colDef(
+    minWidth = 150,
+    cell = function(value, index) {
+      div(
+        class = "sample",
+        div(class = "sample-name", value),
+        div(class = "project-name", table.data[[index, "Library process"]])
+      )
+    }
+  ),
+  "Library process" = colDef(show = FALSE),
+  "Lane composition" = colDef(
+    minWidth = 130,
+    cell = function(lst) {
+      value <- lst$percentage %>% as.numeric()
+      expected <- 100 / lst$samples.per.lane
+      margin <- expected * 0.1
+      class <- ifelse(abs(value-expected) < margin, "ok", "warn") %>%
+        paste0("tag status-",.)
+      div(class = class, value %>% sprintf(fmt = "%.1f%%"))
+    }
+  ),
+  "Clusters" = colDef(
+    minWidth = 100,
+    cell = function(v) { scales::comma(v)}
+  ),
+  "Clusters Graph" = colDef(
+    name = "",
+    width = 100,
+    sortable = FALSE,
+    cell = function(l) {
+      sparkline(
+        c(l$exp, l$obs, l$max.overall, l$max.per.lane, 0),
+        type = "bullet",
+        width = "100px",
+        targetColor = "#27ae60",
+        targetWidth = 1,
+        performanceColor = "#2980b9",
+        rangeColors = c('#ecf0f100', '#ecf0f100', '#ecf0f100')
+      )
+    }
+  ),
+  "Blast - 1st hit" = colDef(
+    minWidth = 200,
+    name = "Blast hits",
+    cell = function(value, index) {
+      match.1st <- str_match(value, "(.*) (\\(\\d+\\))")
+      match.2nd <- str_match(table.data[index,"Blast - 2nd hit"], "(.*) (\\(\\d+\\))")
+      match.3rd <- str_match(table.data[index,"Blast - 3rd hit"], "(.*) (\\(\\d+\\))")
+      div(
+        class = "blast-results",
+        div(
+          class="blast-top",
+          span(class = "name", match.1st[,2]),
+          span(class = "hit-count", match.1st[,3])
+        ),
+        div(
+          class="blast-top",
+            span(class = "name", match.2nd[,2]),
+          span(class = "hit-count", match.2nd[,3])
+        ),
+        div(
+          class="blast-top",
+          span(class = "name", match.3rd[,2]),
+          span(class = "hit-count", match.3rd[,3])
+        )
+      )
+    }
+  ),
+  "Blast - 2nd hit"   = colDef(show = FALSE),
+  "Blast - 3rd hit"   = colDef(show = FALSE),
+  "Library process"   = colDef(minWidth = 250),
+  "Expected species"  = colDef(minWidth = 300),
+  "Blast - 1st hit"   = colDef(minWidth = 200),
+  "Blast - 2nd hit"   = colDef(minWidth = 200),
+  "Blast - 3rd hit"   = colDef(minWidth = 200)
+)
+
+table.data %>% reactable(
+  columns = column_definitions,
+  rownames = FALSE,
+  class = "samples-table",
+  theme = reactableTheme(
+    cellStyle = list(
+      display = "flex",
+      flexDirection = "column",
+      justifyContent = "center"
+    )
+  )
+)
+```
+
+### Index Metrics
+
+```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
+kable(indexinfo, row.names = FALSE)
+```
+

@@ -1,0 +1,55 @@
+.tag {
+    display: inline-block;
+    padding: 2px 12px;
+    border-radius: 15px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.status-ok {
+    background: hsl(116, 60%, 90%);
+    color: hsl(116, 30%, 25%);
+}
+
+.status-warn {
+    background: hsl(46, 70%, 90%);
+    color: hsl(46, 45%, 30%);
+}
+
+.status-error {
+    background: hsl(350, 70%, 90%);
+    color: hsl(350, 45%, 30%);
+}
+
+.samples-table {
+    border: 1px solid hsl(213, 33%, 93%);
+    border-radius: 4px;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.1);
+}
+
+.project-name {
+    color: #999;
+    font-size: 8px;
+}
+
+.blast-results {
+    font-size: xx-small
+}
+
+.blast-results .hit-count {
+    margin-left: 5px;
+    color: #999;
+}
+
+.html-widget.sparkline {
+    margin-bottom: 0;
+}
+
+
+#index-metrics .table {
+    font-size: x-small;
+}
+
+#index-metrics .table td {
+padding: 1px;
+}
