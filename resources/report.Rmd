@@ -232,7 +232,7 @@ table.data %>% reactable(
 )
 ```
 
-### Index Metrics
+### Index Information
 
 ```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
 kable(indexinfo, row.names = FALSE)
