@@ -248,7 +248,6 @@ table.data %>% reactable(
 kable(indexinfo, row.names = FALSE)
 ```
 
-
 ### Barcode Metrics
 
 
