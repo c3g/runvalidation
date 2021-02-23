@@ -13,11 +13,11 @@ process RenderReport {
     tag {run_id}
     cache 'deep'
     stageInMode 'copy'
-    module 'mugqic_dev/pandoc'
+    module 'mugqic/pandoc'
     executor 'local'
 
     input:
-    tuple val(run_id), path(jsons), path(sample_sheet), path(template), path(css)
+    tuple val(run_id), path(jsons), path(sample_sheet), path("demux_metrics/*"), path(template), path(css)
 
     output:
     tuple val(run_id), path("${run_id}.report.html")
@@ -54,6 +54,27 @@ process UploadRunReport {
     """
 }
 
+
+
+process UploadRunReportTest {
+    tag {run_id}
+    executor 'local'
+
+    input:
+    tuple val(run_id), path(report)
+
+    output:
+    tuple val(run_id), val("https://datahub-297-p25.p.genap.ca/MGI_validation/testing/$report")
+
+    """
+    sftp -P 22004 sftp_p25@sftp-arbutus.genap.ca <<EOF
+    mkdir /datahub297/MGI_validation/testing/
+    put $report /datahub297/MGI_validation/testing/
+    chmod 664 /datahub297/MGI_validation/testing/*.html
+    EOF
+    """
+}
+
 workflow {
     sample_sheets =  Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*_samples.txt") \
     | map( it -> [get_run_id(it), it] )
@@ -61,23 +82,32 @@ workflow {
     run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
     | map( it -> [get_run_id(it), it] )
 
+    demux_metrics = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.DemuxFastqs.metrics.txt") \
+    | map ( it -> [get_run_id(it), it] ) \
+    | groupTuple()
+
     rmd_template = file(params.template)
     rmd_css = file(params.css)
 
     run_validations \
     | groupTuple() \
     | combine(sample_sheets, by: 0) \
+    | combine(demux_metrics, by: 0) \
     | combine([[rmd_template, rmd_css]]) \
     | RenderReport \
     | UploadRunReport
 }
 
 workflow test {
+    run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
+    | map( it -> [get_run_id(it), it] )
+
     sample_sheets =  Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*_samples.txt") \
     | map( it -> [get_run_id(it), it] )
 
-    run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
-    | map( it -> [get_run_id(it), it] )
+    demux_metrics = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.DemuxFastqs.metrics.txt") \
+    | map ( it -> [get_run_id(it), it] ) \
+    | groupTuple()
 
     rmd_template = file(params.template)
     rmd_css = file(params.css)
@@ -85,8 +115,10 @@ workflow test {
     run_validations \
     | groupTuple() \
     | combine(sample_sheets, by: 0) \
+    | combine(demux_metrics, by: 0) \
     | combine([[rmd_template, rmd_css]]) \
     | take(5) \
     | RenderReport \
-    | view { run_id, report -> "Report rendered: $report (Run: $run_id)" }
+    | UploadRunReportTest \
+    | view { run_id, url -> "Run $run_id: $url" }
 }
