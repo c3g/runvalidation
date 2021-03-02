@@ -76,13 +76,13 @@ process UploadRunReportTest {
 }
 
 workflow {
-    sample_sheets =  Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*_samples.txt") \
+    sample_sheets =  Channel.fromPath("/lb/robot/research/processing/dnbseqg400/*/*/*_samples.txt") \
     | map( it -> [get_run_id(it), it] )
 
-    run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
+    run_validations = Channel.fromPath("/lb/robot/research/processing/dnbseqg400/*/*/*/*.run_validation_report.json") \
     | map( it -> [get_run_id(it), it] )
 
-    demux_metrics = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.DemuxFastqs.metrics.txt") \
+    demux_metrics = Channel.fromPath("/lb/robot/research/processing/dnbseqg400/*/*/*/*.DemuxFastqs.metrics.txt") \
     | map ( it -> [get_run_id(it), it] ) \
     | groupTuple()
 
@@ -99,13 +99,13 @@ workflow {
 }
 
 workflow test {
-    run_validations = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.run_validation_report.json") \
+    run_validations = Channel.fromPath("/lb/robot/research/processing/dnbseqg400/*/*/*/*.run_validation_report.json") \
     | map( it -> [get_run_id(it), it] )
 
-    sample_sheets =  Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*_samples.txt") \
+    sample_sheets =  Channel.fromPath("/lb/robot/research/processing/dnbseqg400/*/*/*_samples.txt") \
     | map( it -> [get_run_id(it), it] )
 
-    demux_metrics = Channel.fromPath("/lb/robot/research/MGISeq/dnbseqg400/*/*/*/*.DemuxFastqs.metrics.txt") \
+    demux_metrics = Channel.fromPath("/lb/robot/research/processing/dnbseqg400/*/*/*/*.DemuxFastqs.metrics.txt") \
     | map ( it -> [get_run_id(it), it] ) \
     | groupTuple()
 
