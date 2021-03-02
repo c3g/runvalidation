@@ -70,14 +70,28 @@ indexinfo <- lapply(jsons, function(x) {
 }) %>% do.call(what=rbind)
 
 
-barcode_metrics <- list.files("demux_metrics", full.names = TRUE) %>%
+get_sample_from_full_barcode_name <- function(barcodes, libraries) {
+  barcodes %>% str_split(paste0("_", libraries, "_")) %>% sapply(function(row) row[1])
+}
+
+get_simple_barcode_from_full_barcode_name <- function(barcodes, libraries) {
+  barcodes %>%
+    str_split(paste0("_", libraries, "_")) %>%
+    sapply(function(row) row[2])
+}
+
+list.files("demux_metrics", full.names = TRUE) %>%
   lapply(function(path) {
-    lane <- str_match(path, "([0-9]).DemuxFastqs.metrics.txt")[,2]
+    lane <- str_match(path, "([0-9]).DemuxFastqs.metrics.txt")[, 2]
     read_tsv(path) %>% mutate(lane = lane)
   }) %>%
-  do.call(what=rbind) %>%
-  relocate(lane) %>%
-  arrange(lane, templates %>% desc())
+  do.call(what = rbind) %>%
+  mutate(
+    sample = get_sample_from_full_barcode_name(barcode_name, library_name),
+    barcode_simple = get_simple_barcode_from_full_barcode_name(barcode_name, library_name) %>% replace_na("unmatched"),
+  ) %>%
+  relocate(lane, library_name, sample, barcode_simple) %>%
+  arrange(lane, templates %>% desc()) -> barcode_metrics
 ```
 
 ```{r include=FALSE}
@@ -253,15 +267,21 @@ kable(indexinfo, row.names = FALSE)
 
 ```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
 barcode_metrics %>%
-  mutate(fraction_matches = sprintf("%.3f", fraction_matches),
-         ratio_this_barcode_to_best_barcode = sprintf("%.3f", ratio_this_barcode_to_best_barcode),
-         pf_normalized_matches = sprintf("%.3f", pf_normalized_matches)) %>%
+  mutate(
+    ratio_this_barcode_to_best_barcode = sprintf("%.3f", ratio_this_barcode_to_best_barcode),
+    pf_normalized_matches = sprintf("%.3f", pf_normalized_matches),
+    templates = templates %>% scales::comma(),
+    perfect_matches = perfect_matches %>% scales::comma(),
+    one_mismatch_matches = one_mismatch_matches %>% scales::comma(),
+    fraction_matches = fraction_matches %>% scales::percent(accuracy = 0.1, trim = FALSE),
+  ) %>%
   select(
     -pf_templates,
     -pf_perfect_matches,
     -pf_one_mismatch_matches,
     -pf_fraction_matches,
-    -pf_ratio_this_barcode_to_best_barcode
+    -pf_ratio_this_barcode_to_best_barcode,
+    -barcode_name,
   ) %>%
   reactable(
     pagination = FALSE,
@@ -270,8 +290,9 @@ barcode_metrics %>%
     ),
     columns = list(
       lane = colDef(name = "Lane", align = "left", maxWidth = 50),
-      barcode_name = colDef(name = "Barcode Name", align = "right", minWidth = 250),
       library_name = colDef(name = "Library", align = "right"),
+      sample = colDef(name = "Sample", align = "right"),
+      barcode_simple = colDef(name = "Barcode Name", align = "right", minWidth = 150),
       barcode = colDef(name = "Barcode", align = "right"),
       templates = colDef(name = "Templates", align = "right"),
       ratio_this_barcode_to_best_barcode = colDef(name = "Barcode:Best Barcode (ratio)", align = "right", minWidth = 150),
@@ -279,7 +300,23 @@ barcode_metrics %>%
       fraction_matches = colDef(name = "Matches (fraction)", align = "right"),
       one_mismatch_matches = colDef(name = "Matches (one mismatch)", align = "right", minWidth = 120),
       pf_normalized_matches = colDef(name = "Normalized Matches", align = "right")
-    )
+    ),
+    rowStyle = JS(
+      "
+    function(rowInfo, state) {
+      // input:
+      //  - rowInfo, an object containing row info
+      //  - state, an object containing the table state (optional)
+      //
+      // output:
+      //  - a style object with camelCased properties
+      if (rowInfo['row']['sample'] == 'unmatched') {
+        return { backgroundColor: '#ea3a3a14' }
+      } else {
+        return { backgroundColor: '#00000000' }
+      }
+    }
+  ")
   )
 ```
 
