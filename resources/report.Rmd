@@ -58,7 +58,7 @@ runinfo <- tibble(
 	"Instrument"          = jsons %>% map("instrument") %>% unique %>% paste(collapse=", "),
 	"Total PF clusters(G)"= jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
 	"Spreads"             = jsons %>% map("spread")%>% unlist %>% round(2) %>% paste(collapse=", "),
-	"Project(s)"          = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% c %>% unique %>% paste(collapse = ",")
+	"Project(s)"          = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
 	) %>% t %>% data.frame
 
 indexinfo <- lapply(jsons, function(x) {
