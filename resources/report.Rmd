@@ -25,7 +25,6 @@ library(magrittr)
 library(reactable)
 library(htmltools)
 library(stringr)
-library(DT)
 library(jsonlite)
 library(DT)
 library(knitr)
@@ -67,7 +66,8 @@ indexinfo <- lapply(jsons, function(x) {
       as_tibble(sample_lanes[[mgi_index_num]])
     }) %>% do.call(what = rbind)
   }) %>% do.call(what = rbind)
-}) %>% do.call(what=rbind)
+}) %>% do.call(what=rbind) %>%
+  select(SAMPLESHEET_NAME, LIBRARY, PROJECT, BARCODE_SEQUENCE, INDEX_NAME, INDEX1, INDEX2, ADAPTERi5, ADAPTERi7)
 
 
 get_sample_from_full_barcode_name <- function(barcodes, libraries) {
@@ -286,7 +286,9 @@ barcode_metrics %>%
     -pf_ratio_this_barcode_to_best_barcode,
     -barcode_name,
   ) %>%
-  arrange(lane, sample) %>%
+  arrange(lane, sample) -> barcode_metrics_data
+
+barcode_metrics_data %>%
   reactable(
     defaultSorted = c("lane"),
     defaultColDef = colDef(class = "cell", headerClass = "header"),
@@ -321,34 +323,33 @@ barcode_metrics %>%
     # Emphasize borders between groups when sorting by lane
     rowClass = JS("
       function(rowInfo, state) {
+        let rowClasses = [];
+        // Check if row is last in lane
         const firstSorted = state.sorted[0]
         if (firstSorted && firstSorted.id === 'lane') {
           const nextRow = state.pageRows[rowInfo.viewIndex + 1]
           if (nextRow && rowInfo.row.lane !== nextRow.lane) {
-            return 'lane-last'
+            rowClasses.push('lane-last')
           }
           if (!nextRow) {
-            return 'lane-last'
+            rowClasses.push('lane-last')
           }
         }
+
+        // Check if pf_normalized_matches is above 1
+        pf_normalized_matches = parseFloat(rowInfo['row']['pf_normalized_matches'])
+        if (pf_normalized_matches >1 ) {
+          rowClasses.push('normalised-matches-warn')
+        }
+
+        // We want to highlight the number of reads without matches to known indices
+        if (rowInfo['row']['sample'] == 'unmatched') {
+          rowClasses.push('unmatched')
+        }
+
+        return rowClasses.join(' ')
       }"
     ),
-    rowStyle = JS(
-      "
-    function(rowInfo, state) {
-      // input:
-      //  - rowInfo, an object containing row info
-      //  - state, an object containing the table state (optional)
-      //
-      // output:
-      //  - a style object with camelCased properties
-      if (rowInfo['row']['sample'] == 'unmatched') {
-        return { backgroundColor: '#ea3a3a14' }
-      } else {
-        return { backgroundColor: '#00000000' }
-      }
-    }
-  ")
   )
 ```
 
