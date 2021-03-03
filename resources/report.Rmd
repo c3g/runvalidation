@@ -137,10 +137,11 @@ clusters_bulletgraph <- function(expected, observed, max) {
 
 rsmetrics %>%
   group_by(lane) %>%
-  mutate(index.expected = sum(`index.PF Clusters`) / n(),
-         index.max.per.lane = max(`index.PF Clusters`),
-         samples.per.lane = n(),
-         ) %>%
+  mutate(
+    index.expected = sum(`index.PF Clusters`) / n(),
+    index.max.per.lane = max(`index.PF Clusters`),
+    samples.per.lane = n(),
+  ) %>%
   ungroup() %>%
   mutate(
     clusters.for.sparkline = mapply(function(obs, exp, max1, max2) { list(exp=exp, obs=obs, max.per.lane=max1, max.overall=max2)}, `index.PF Clusters`, index.expected, index.max.per.lane, rep(max(`index.PF Clusters`), n()), SIMPLIFY = FALSE),
@@ -268,6 +269,8 @@ kable(indexinfo, row.names = FALSE)
 ```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
 barcode_metrics %>%
   mutate(
+    sample = as.factor(sample) %>% fct_relevel("unmatched", after = Inf),
+    lane = paste("Lane", lane),
     ratio_this_barcode_to_best_barcode = sprintf("%.3f", ratio_this_barcode_to_best_barcode),
     pf_normalized_matches = sprintf("%.3f", pf_normalized_matches),
     templates = templates %>% scales::comma(),
@@ -283,23 +286,52 @@ barcode_metrics %>%
     -pf_ratio_this_barcode_to_best_barcode,
     -barcode_name,
   ) %>%
+  arrange(lane, sample) %>%
   reactable(
+    # groupBy = 'lane',
+    defaultColDef = colDef(class = "cell", headerClass = "header"),
+    defaultExpanded = TRUE,
     pagination = FALSE,
     theme = reactableTheme(
       cellPadding = "2px 5px",
     ),
     columns = list(
-      lane = colDef(name = "Lane", align = "left", maxWidth = 50),
-      library_name = colDef(name = "Library", align = "right"),
-      sample = colDef(name = "Sample", align = "right"),
-      barcode_simple = colDef(name = "Barcode Name", align = "right", minWidth = 150),
+      lane = colDef(name = "Lane", align = "left", width = 90),
+      library_name = colDef(name = "Library", align = "right", width = 100),
+      sample = colDef(name = "Sample", align = "right", minWidth = 175),
+      barcode_simple = colDef(name = "Barcode Name", align = "right", minWidth = 125),
       barcode = colDef(name = "Barcode", align = "right"),
-      templates = colDef(name = "Templates", align = "right"),
+      templates = colDef(name = "Templates", align = "right", aggregate = JS("
+      function(values, rows) {
+        // input:
+        //  - values: an array of all values in the group
+        //  - rows: an array of row data objects for all rows in the group (optional)
+        //
+        // output:
+        //  - an aggregated value, e.g. a comma-separated list
+        return values.map(x => parseFloat(x.replace(/,/g, ''))).reduce((a, b) => a + b, 0).toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')
+      }
+    ")),
       ratio_this_barcode_to_best_barcode = colDef(name = "Barcode:Best Barcode (ratio)", align = "right", minWidth = 150),
       perfect_matches = colDef(name = "Matches (perfect)", align = "right"),
       fraction_matches = colDef(name = "Matches (fraction)", align = "right"),
       one_mismatch_matches = colDef(name = "Matches (one mismatch)", align = "right", minWidth = 120),
-      pf_normalized_matches = colDef(name = "Normalized Matches", align = "right")
+      pf_normalized_matches = colDef(name = "Normalized Matches", align = "right", width = 90)
+    ),
+    # Emphasize borders between groups when sorting by lane
+    rowClass = JS("
+      function(rowInfo, state) {
+        const firstSorted = state.sorted[0]
+        if (firstSorted && firstSorted.id === 'lane') {
+          const nextRow = state.pageRows[rowInfo.viewIndex + 1]
+          if (nextRow && rowInfo.row.lane !== nextRow.lane) {
+            return 'lane-last'
+          }
+          if (!nextRow) {
+            return 'lane-last'
+          }
+        }
+      }"
     ),
     rowStyle = JS(
       "
