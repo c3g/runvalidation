@@ -76,6 +76,15 @@
   box-shadow: inset 0 -1px 0 #55555559;
 }
 
+.unmatched {
+  background: #ea3a3a14;
+}
+
+.unmatched.normalised-matches-warn {
+  font-weight: bold;
+  color: #d63031;
+}
+
 .group-header {
   display: flex;
   flex-direction: column;
