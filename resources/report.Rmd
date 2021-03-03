@@ -288,7 +288,7 @@ barcode_metrics %>%
   ) %>%
   arrange(lane, sample) %>%
   reactable(
-    # groupBy = 'lane',
+    defaultSorted = c("lane"),
     defaultColDef = colDef(class = "cell", headerClass = "header"),
     defaultExpanded = TRUE,
     pagination = FALSE,
