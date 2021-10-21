@@ -26,6 +26,7 @@ process GetInputs {
     cp ${rundir}/*.txt out/
     for json in \$(find ${rundir}/ -name '*run_validation_report.json'); do cp \$json out; done
     for metrics in \$(find ${rundir}/ -name '*DemuxFastqs.metrics.txt'); do cp \$metrics out; done
+    for stats in \$(find ${rundir}/ -name '*.fqStat.txt'); do cp \$stats out; done
     """
 }
 

@@ -35,6 +35,23 @@ library(sparkline)
 library(assertthat)
 ```
 
+
+
+```{r message=TRUE, warning=TRUE, include=FALSE}
+# Check whether we have a demultiplexed run or a one-sample-per-lane run:
+# Do we have any demux metrics files?
+has.demux.metrics <- list.files(pattern = "*DemuxFastqs.metrics.txt$", recursive = T) %>% length %>% is_greater_than(0)
+
+# Do all the validation reports contain  a "total_pf_clusters" field?
+has.cluster.counts <- list.files(pattern = "*run_validation_report.json$", recursive = T, full.names = T) %>%
+  lapply(read_json) %>%
+  sapply(has_name, which = "total_pf_clusters") %>%
+  all()
+
+run.is.demultiplexed <- has.demux.metrics && has.cluster.counts
+```
+
+
 ```{r message=TRUE, warning=TRUE, include=FALSE}
 find.json.reports <- function() {
   pattern <- "*run_validation_report.json$"
@@ -44,7 +61,6 @@ find.json.reports <- function() {
     filename <- filenames[i]
     see_if(filename %>% is.writeable, msg = paste0("Could not read file: ", filename, "."))
   }
-
   filenames
 }
 
@@ -53,19 +69,15 @@ parse.json.reports.v1 <- function(filenames) {
 
   for (i in seq_along(list.of.reports)) {
     report <- list.of.reports[[i]]
-    assert_that(report %has_name% 'lane',             msg = paste0("Could not find a lane number in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'lane',              msg = paste0("Could not find a lane number in report: '", filenames[[i]], "'"))
     assert_that(report %has_name% 'run',               msg = paste0("Could not find a run id in report: '", filenames[[i]], "'"))
-    assert_that(report %has_name% 'total_pf_clusters', msg = paste0("Could not find a run id in report: '", filenames[[i]], "'"))
     assert_that(report %has_name% 'instrument',        msg = paste0("Could not find instrument id in report: '", filenames[[i]], "'"))
-    assert_that(report %has_name% 'spread',            msg = paste0("Could not find a spread summary in report: '", filenames[[i]], "'"))
     assert_that(report %has_name% 'flowcell',          msg = paste0("Could not find a flowcell id in report: '", filenames[[i]], "'"))
     assert_that(report %has_name% 'seqtype',           msg = paste0("Could not find seqtype in report: '", filenames[[i]], "'"))
-    assert_that(report %has_name% 'total_pf_clusters', msg = paste0("Could not find a run id in report: '", filenames[[i]], "'"))
     assert_that(report %has_name% 'sequencing_method',
            report$sequencing_method %in% c("PAIRED_END", "SINGLE_END"),
            msg = paste0("Could not find valid 'sequencing_method' value in report ", filenames[[i]], ". Should be 'PAIRED_END' or 'SINGLE_END'"))
   }
-
   list.of.reports
 }
 
@@ -118,15 +130,12 @@ parse.eventfile.v1 <- function(filename) {
         `ChIP-Seq Mark` = col_character()
       )
     ) %>%
-    mutate(row = paste0(Index, "_lane", Position %>% gsub(":.*", "", .))) %>%
+    mutate(
+      row = paste0(Index, "_lane", Position %>% gsub(":.*", "", .)),
+      Lane = row %>% str_split("_lane") %>% sapply(tail, n=1) %>% as.integer(),
+      Species = str_replace(Species, "N/A", "Not provided")
+    ) %>%
     column_to_rownames("row")
-}
-
-find.demux_metrics <- function() {
-  pattern <- "([0-9]).DemuxFastqs.metrics.txt"
-  filenames <- list.files('.', pattern, recursive = T, full.names = T)
-  assert_that(filenames %>% not_empty, msg = paste0("Could not find any event files matching pattern \"", pattern, "\""))
-  filenames
 }
 
 get_sample_from_full_barcode_name <- function(barcodes, libraries) {
@@ -139,7 +148,15 @@ get_simple_barcode_from_full_barcode_name <- function(barcodes, libraries) {
     sapply(function(row) row[2])
 }
 
+find.demux_metrics <- function() {
+  pattern <- "*DemuxFastqs.metrics.txt$"
+  list.files('.', pattern, recursive = T, full.names = T)
+}
+
 parse.demux_metrics.v1 <- function(filenames) {
+  if (length(filenames) == 0) {
+    return(tibble())
+  }
   filenames %>%
     lapply(function(filename) {
       assert_that(is.readable(filename))
@@ -173,61 +190,94 @@ parse.demux_metrics.v1 <- function(filenames) {
     relocate(lane, library_name, sample, barcode_simple) %>%
     arrange(lane, desc(templates))
 }
-```
 
+find.fqstats <- function() {
+  pattern <- "*.fqStat.txt$"
+  filenames <- list.files('.', pattern, recursive = T, full.names = T)
+  filenames
+}
+
+parse.fqstats <- function(filenames) {
+  filenames %>%
+    lapply(function(filename) {
+      # Metatdata is contained in the first 12 lines
+      meta <- read_tsv(filename, n_max = 12, col_names = c("key", "value")) %>%
+        mutate(key = str_remove(key, "^#")) %>%
+        pivot_wider(names_from = 'key') %>%
+        mutate(
+          Lane = str_match(filename, "_L([0-9]+)_")[, 2],
+          Read = str_match(Name, "read_([12])")[, 2]
+        )
+    }) %>%
+    do.call(what = rbind) %>%
+    relocate(Lane, Read) %>%
+    select(-Name) %>%
+    arrange(Lane, Read) %>%
+    type.convert()
+}
+```
 
 ```{r message=TRUE, warning=TRUE, include=FALSE}
 jsons           <- find.json.reports()  %>% parse.json.reports.v1()
 eventfile       <- find.eventfile()     %>% parse.eventfile.v1()
-barcode_metrics <- find.demux_metrics() %>% parse.demux_metrics.v1()
+fqstats         <- find.fqstats()       %>% parse.fqstats()
+if(run.is.demultiplexed) barcode_metrics <- find.demux_metrics() %>% parse.demux_metrics.v1()
+```
 
-runinfo <- tibble(
-  "Run"                 = jsons %>% map("run")               %>% unique %>% paste(collapse = ","),
-  "Sequencing Type"     = jsons %>% map("seqtype")           %>% unique %>% paste(collapse = ","),
-  "Flowcell"            = jsons %>% map("flowcell")          %>% unique %>% paste(collapse=", "),
-	"Seq. Method"         = jsons %>% map("sequencing_method") %>% unique %>% paste(collapse=", "),
-	"Instrument"          = jsons %>% map("instrument")        %>% unique %>% paste(collapse=", "),
-	"Total PF clusters(G)"= jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
-	"Spreads"             = jsons %>% map("spread")            %>% unlist %>% round(2) %>% paste(collapse=", "),
-	"Project(s)"          = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
-	) %>% t %>% data.frame
-
-indexinfo <- lapply(jsons, function(x) {
-  lapply(x$barcodes, function(sample_lanes) {
-    seq_along(sample_lanes) %>% lapply(function(mgi_index_num) {
-      as_tibble(sample_lanes[[mgi_index_num]])
-    }) %>% do.call(what = rbind)
-  }) %>% do.call(what = rbind)
-}) %>% do.call(what=rbind) %>%
-  select(SAMPLESHEET_NAME, LIBRARY, PROJECT, BARCODE_SEQUENCE, INDEX_NAME, INDEX1, INDEX2, ADAPTERi5, ADAPTERi7)
+```{r message=TRUE, warning=TRUE, include=FALSE}
+if(run.is.demultiplexed) {
+  runinfo <- tibble(
+    "Run"                   = jsons %>% map("run")               %>% unique %>% paste(collapse = ","),
+    "Sequencing Type"       = jsons %>% map("seqtype")           %>% unique %>% paste(collapse = ","),
+    "Flowcell"              = jsons %>% map("flowcell")          %>% unique %>% paste(collapse=", "),
+  	"Seq. Method"           = jsons %>% map("sequencing_method") %>% unique %>% paste(collapse=", "),
+  	"Instrument"            = jsons %>% map("instrument")        %>% unique %>% paste(collapse=", "),
+    "Total read number"     = fqstats$ReadNum %>% sum %>% divide_by(1) %>% round(1) %>% scales::comma(),
+    "Total bases (Mbp)"     = fqstats$BaseNum %>% sum %>% scales::comma(scale = 1/1e6),
+    "Total PF clusters(G)"  = jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
+  	"Spreads"               = jsons %>% map("spread") %>% unlist %>% round(2) %>% paste(collapse=", "),
+  	"Project(s)"            = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
+  	) %>% t %>% data.frame
+} else {
+  runinfo <- tibble(
+    "Run"                   = jsons %>% map("run")               %>% unique %>% paste(collapse = ","),
+    "Sequencing Type"       = jsons %>% map("seqtype")           %>% unique %>% paste(collapse = ","),
+    "Flowcell"              = jsons %>% map("flowcell")          %>% unique %>% paste(collapse=", "),
+  	"Seq. Method"           = jsons %>% map("sequencing_method") %>% unique %>% paste(collapse=", "),
+  	"Instrument"            = jsons %>% map("instrument")        %>% unique %>% paste(collapse=", "),
+    "Total read number"     = fqstats$ReadNum %>% sum %>% divide_by(1) %>% round(1) %>% scales::comma(),
+    "Total bases (Mbp)"     = fqstats$BaseNum %>% sum %>% scales::comma(scale = 1/1e6),
+    "Total PF clusters(G)"  = "N/A (run not demultiplexed)",
+  	"Spreads"               = "N/A (run not demultiplexed)",
+  	"Project(s)"            = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
+  	) %>% t %>% data.frame
+}
 ```
 
 
 ```{r include=FALSE}
 rsmetrics = map(jsons,"run_validation")
 names(rsmetrics) = paste0("lane", map(jsons,"lane") )
-rsmetrics %<>% sapply(function(x) sapply(x,unlist,simplify=F),simplify=F) # yuck
-rsmetrics %<>% sapply(function(x) do.call(rbind,x),simplify=F) # yuck
-rsmetrics %<>% sapply(function(df) {data.frame(df,check.names=F)},simplify=F) # yuck
-rsmetrics %<>% mapply(function(df,lane) {df$lane=lane;df},.,names(.),SIMPLIFY=F) # yuck TODO: onot sure will work if alignment stats
+rsmetrics %<>% sapply(function(x) sapply(x,unlist,simplify=F),simplify=F)
+rsmetrics %<>% sapply(function(x) do.call(rbind,x),simplify=F)
+rsmetrics %<>% sapply(function(df) {data.frame(df,check.names=F)},simplify=F)
+rsmetrics %<>% mapply(function(df,lane) {df$lane=lane;df},.,names(.),SIMPLIFY=F)
 rsmetrics %<>% do.call(rbind,.)
-rownames(rsmetrics) = paste0(rsmetrics$"index.Barcode","_",rsmetrics$lane) # yuck # TODO: WHY MISSING S!!!
 rsmetrics %<>% type.convert(as.is=TRUE)
-rsmetrics %<>% cbind(eventfile[rownames(rsmetrics),])
-rsmetrics$"on_target" = ifelse(rsmetrics$"index.% of the lane"/100  >= 0.75*rsmetrics$"Pool Fraction","yes","no") # JUST a mock example of coloring...
-rsmetrics %<>% relocate(lane,project,SampleName,LibraryProcess,`index.PF Clusters`,on_target,Species,blast.1st_hit)
-rsmetrics$row=1:nrow(rsmetrics)
-```
 
-
-```{r include=FALSE}
-pfreads_plot = ggplot(rsmetrics, aes(y = `index.PF Clusters` / 1e6, x = row)) +
-  geom_point(aes(color = lane, label = SampleName)) +
-  geom_line(color = "black",
-            linetype = "dashed",
-            alpha = 0.5) +
-  ylab("Million Clusters") +
-  ylim(c(0, max(rsmetrics$"index.PF Clusters" / 1e6)))
+if(run.is.demultiplexed) {
+  rownames(rsmetrics) = paste0(rsmetrics$"index.Barcode","_",rsmetrics$lane) # yuck # TODO: WHY MISSING S!!!
+  rsmetrics %<>% cbind(eventfile[rownames(rsmetrics),])
+  rsmetrics$"on_target" = ifelse(rsmetrics$"index.% of the lane"/100  >= 0.75*rsmetrics$"Pool Fraction","yes","no") # JUST a mock example of coloring...
+  rsmetrics %<>% relocate(lane, project, SampleName, LibraryProcess, `index.PF Clusters`, on_target, Species, blast.1st_hit)
+  rsmetrics$ReadNum <- rsmetrics[["index.PF Clusters"]]
+  rsmetrics$row <- 1:nrow(rsmetrics)
+} else {
+  rsmetrics$Lane <- str_remove(rsmetrics$lane, "lane") %>% as.integer
+  rsmetrics %<>% left_join(eventfile, by = "Lane")
+  rsmetrics %<>% left_join(select(fqstats, Lane, ReadNum) %>% group_by(Lane) %>% summarise(ReadNum = sum(ReadNum)), by = "Lane")
+  rsmetrics %<>% relocate(lane, project, SampleName, LibraryProcess, Species, blast.1st_hit)
+}
 ```
 
 ## Run Processing Report {.tabset}
@@ -235,8 +285,32 @@ pfreads_plot = ggplot(rsmetrics, aes(y = `index.PF Clusters` / 1e6, x = row)) +
 ### Run Metrics
 
 ```{r echo=F, fig.dim=c(8, 3), messages=F, warnings=F}
-kable(runinfo, col.names = c("",NULL))
-pfreads_plot %>% ggplotly
+kable(runinfo, col.names = c("", NULL))
+
+if (run.is.demultiplexed) {
+  rsmetrics %>%
+    mutate(ID = paste0("Lane ", Lane, ": ", SampleName)) %>%
+    ggplot(aes(row, ReadNum, fill=ID)) +
+    geom_bar(stat="identity", alpha = 0.85) +
+    ylab("Million Clusters") +
+    scale_y_continuous(labels = function(x) scales::comma(x, scale = 1/1e6), limits = c(0,NA), name = "Clusters (M)") +
+    theme_minimal() +
+    theme(axis.title.x=element_blank(), axis.text.x = element_blank(), legend.title = element_blank()) -> plot
+    ggplotly(plot)
+} else {
+  fqstats %>%
+    group_by(Lane) %>%
+    summarise(ReadNum = sum(ReadNum), BaseNum = sum(BaseNum)) %>%
+    mutate("Lane name" = as.factor(Lane)) %>%
+    left_join(select(eventfile, SampleName, Lane), by = 'Lane') %>%
+    ggplot(aes(Lane, ReadNum, fill=`Lane name`)) +
+    geom_bar(stat = "identity", alpha = 0.85) +
+    scale_y_continuous(labels = function(x) scales::comma(x, scale = 1/1e6), limits = c(0,NA)) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    ylab("Clusters (M)") -> plot
+    ggplotly(plot)
+}
 ```
 
 ```{r echo=FALSE}
@@ -245,15 +319,15 @@ clusters_bulletgraph <- function(expected, observed, max) sparkline(c(expected,o
 rsmetrics %>%
   group_by(lane) %>%
   mutate(
-    index.expected = sum(`index.PF Clusters`) / n(),
-    index.max.per.lane = max(`index.PF Clusters`),
+    index.expected = sum(ReadNum) / n(),
+    index.max.per.lane = max(ReadNum),
     samples.per.lane = n(),
   ) %>%
   ungroup() %>%
   mutate(
-    clusters.for.sparkline = mapply(function(obs, exp, max1, max2) { list(exp=exp, obs=obs, max.per.lane=max1, max.overall=max2)}, `index.PF Clusters`, index.expected, index.max.per.lane, rep(max(`index.PF Clusters`), n()), SIMPLIFY = FALSE),
-    `index.% on index in lane` = `index.% on index in lane` %>% sprintf(fmt = "%.1f"),
-    `index.% of the lane` = `index.% of the lane` %>% sprintf(fmt = "%.1f"),
+    clusters.for.sparkline = mapply(function(obs, exp, max1, max2) { list(exp=exp, obs=obs, max.per.lane=max1, max.overall=max2)}, ReadNum, index.expected, index.max.per.lane, rep(max(ReadNum), n()), SIMPLIFY = FALSE),
+    `index.% on index in lane` = ifelse(run.is.demultiplexed, `index.% on index in lane` %>% sprintf(fmt = "%.1f"), "100"),
+    `index.% of the lane` = ifelse(run.is.demultiplexed, `index.% of the lane` %>% sprintf(fmt = "%.1f"), "100%"),
     lane.composition.list = mapply(function(percentage, samples.per.lane) {list(percentage = percentage, samples.per.lane = samples.per.lane)}, `index.% on index in lane`, samples.per.lane, SIMPLIFY = FALSE),
     lane = gsub("lane", "Lane ", lane),
   ) %>%
@@ -261,7 +335,7 @@ rsmetrics %>%
     "Lane"                 = lane,
     "Sample name"          = SampleName,
     "Clusters Graph"       = clusters.for.sparkline,
-    "Clusters"             = `index.PF Clusters`,
+    "Clusters"             = ReadNum,
     "Lane composition"     = lane.composition.list,
     "Project"              = project,
     "Library process"      = LibraryProcess,
@@ -366,97 +440,122 @@ table.data %>% reactable(
 
 ### Index Metrics
 
-```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
-kable(indexinfo, row.names = FALSE)
+```{r, fig.dim=c(8, 3), echo=F,messages=F,warnings=F}
+if(run.is.demultiplexed) {
+  indexinfo <- lapply(jsons, function(x) {
+    lapply(x$barcodes, function(sample_lanes) {
+      seq_along(sample_lanes) %>% lapply(function(mgi_index_num) {
+        as_tibble(sample_lanes[[mgi_index_num]])
+      }) %>% do.call(what = rbind)
+    }) %>% do.call(what = rbind)
+  }) %>% do.call(what = rbind) %>% select(
+      SAMPLESHEET_NAME,
+      LIBRARY,
+      PROJECT,
+      BARCODE_SEQUENCE,
+      INDEX_NAME,
+      INDEX1,
+      INDEX2,
+      ADAPTERi5,
+      ADAPTERi7
+    )
+  kable(indexinfo, row.names = FALSE)
+} else {
+  "No index metrics available for runs that are not demultiplexed"
+}
 ```
 
 ### Barcode Metrics
 
 ```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
-barcode_metrics %>%
-  mutate(
-    sample = as.factor(sample) %>% fct_relevel("unmatched", after = Inf),
-    lane = paste("Lane", lane),
-    ratio_this_barcode_to_best_barcode = sprintf("%.3f", ratio_this_barcode_to_best_barcode),
-    pf_normalized_matches = sprintf("%.3f", pf_normalized_matches),
-    templates = templates %>% scales::comma(),
-    perfect_matches = perfect_matches %>% scales::comma(),
-    one_mismatch_matches = one_mismatch_matches %>% scales::comma(),
-    fraction_matches = fraction_matches %>% scales::percent(accuracy = 0.1, trim = FALSE),
-  ) %>%
-  select(
-    -pf_templates,
-    -pf_perfect_matches,
-    -pf_one_mismatch_matches,
-    -pf_fraction_matches,
-    -pf_ratio_this_barcode_to_best_barcode,
-    -barcode_name,
-  ) %>%
-  arrange(lane, sample) -> barcode_metrics_data
+if(run.is.demultiplexed) {
+  barcode_metrics %>%
+    mutate(
+      sample = as.factor(sample) %>% fct_relevel("unmatched", after = Inf),
+      lane = paste("Lane", lane),
+      ratio_this_barcode_to_best_barcode = sprintf("%.3f", ratio_this_barcode_to_best_barcode),
+      pf_normalized_matches = sprintf("%.3f", pf_normalized_matches),
+      templates = templates %>% scales::comma(),
+      perfect_matches = perfect_matches %>% scales::comma(),
+      one_mismatch_matches = one_mismatch_matches %>% scales::comma(),
+      fraction_matches = fraction_matches %>% scales::percent(accuracy = 0.1, trim = FALSE),
+    ) %>%
+    select(
+      -pf_templates,
+      -pf_perfect_matches,
+      -pf_one_mismatch_matches,
+      -pf_fraction_matches,
+      -pf_ratio_this_barcode_to_best_barcode,
+      -barcode_name,
+    ) %>%
+    arrange(lane, sample) -> barcode_metrics_data
 
-barcode_metrics_data %>%
-  reactable(
-    defaultSorted = c("lane"),
-    defaultColDef = colDef(class = "cell", headerClass = "header"),
-    defaultExpanded = TRUE,
-    pagination = FALSE,
-    theme = reactableTheme(
-      cellPadding = "2px 5px",
-    ),
-    columns = list(
-      lane = colDef(name = "Lane", align = "left", width = 90),
-      library_name = colDef(name = "Library", align = "right", width = 100),
-      sample = colDef(name = "Sample", align = "right", minWidth = 175),
-      barcode_simple = colDef(name = "Barcode Name", align = "right", minWidth = 125),
-      barcode = colDef(name = "Barcode", align = "right"),
-      templates = colDef(name = "Templates", align = "right", aggregate = JS("
-      function(values, rows) {
-        // input:
-        //  - values: an array of all values in the group
-        //  - rows: an array of row data objects for all rows in the group (optional)
-        //
-        // output:
-        //  - an aggregated value, e.g. a comma-separated list
-        return values.map(x => parseFloat(x.replace(/,/g, ''))).reduce((a, b) => a + b, 0).toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')
-      }
-    ")),
-      ratio_this_barcode_to_best_barcode = colDef(name = "Barcode:Best Barcode (ratio)", align = "right", minWidth = 150),
-      perfect_matches = colDef(name = "Matches (perfect)", align = "right"),
-      fraction_matches = colDef(name = "Matches (fraction)", align = "right"),
-      one_mismatch_matches = colDef(name = "Matches (one mismatch)", align = "right", minWidth = 120),
-      pf_normalized_matches = colDef(name = "Normalized Matches", align = "right", width = 90)
-    ),
-    # Emphasize borders between groups when sorting by lane
-    rowClass = JS("
-      function(rowInfo, state) {
-        let rowClasses = [];
-        // Check if row is last in lane
-        const firstSorted = state.sorted[0]
-        if (firstSorted && firstSorted.id === 'lane') {
-          const nextRow = state.pageRows[rowInfo.viewIndex + 1]
-          if (nextRow && rowInfo.row.lane !== nextRow.lane) {
-            rowClasses.push('lane-last')
+  barcode_metrics_data %>%
+    reactable(
+      defaultSorted = c("lane"),
+      defaultColDef = colDef(class = "cell", headerClass = "header"),
+      defaultExpanded = TRUE,
+      pagination = FALSE,
+      theme = reactableTheme(
+        cellPadding = "2px 5px",
+      ),
+      columns = list(
+        lane = colDef(name = "Lane", align = "left", width = 90),
+        library_name = colDef(name = "Library", align = "right", width = 100),
+        sample = colDef(name = "Sample", align = "right", minWidth = 175),
+        barcode_simple = colDef(name = "Barcode Name", align = "right", minWidth = 125),
+        barcode = colDef(name = "Barcode", align = "right"),
+        templates = colDef(name = "Templates", align = "right", aggregate = JS("
+        function(values, rows) {
+          // input:
+          //  - values: an array of all values in the group
+          //  - rows: an array of row data objects for all rows in the group (optional)
+          //
+          // output:
+          //  - an aggregated value, e.g. a comma-separated list
+          return values.map(x => parseFloat(x.replace(/,/g, ''))).reduce((a, b) => a + b, 0).toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')
+        }
+      ")),
+        ratio_this_barcode_to_best_barcode = colDef(name = "Barcode:Best Barcode (ratio)", align = "right", minWidth = 150),
+        perfect_matches = colDef(name = "Matches (perfect)", align = "right"),
+        fraction_matches = colDef(name = "Matches (fraction)", align = "right"),
+        one_mismatch_matches = colDef(name = "Matches (one mismatch)", align = "right", minWidth = 120),
+        pf_normalized_matches = colDef(name = "Normalized Matches", align = "right", width = 90)
+      ),
+      # Emphasize borders between groups when sorting by lane
+      rowClass = JS("
+        function(rowInfo, state) {
+          let rowClasses = [];
+          // Check if row is last in lane
+          const firstSorted = state.sorted[0]
+          if (firstSorted && firstSorted.id === 'lane') {
+            const nextRow = state.pageRows[rowInfo.viewIndex + 1]
+            if (nextRow && rowInfo.row.lane !== nextRow.lane) {
+              rowClasses.push('lane-last')
+            }
+            if (!nextRow) {
+              rowClasses.push('lane-last')
+            }
           }
-          if (!nextRow) {
-            rowClasses.push('lane-last')
+
+          // Check if pf_normalized_matches is above 1
+          pf_normalized_matches = parseFloat(rowInfo['row']['pf_normalized_matches'])
+          if (pf_normalized_matches >1 ) {
+            rowClasses.push('normalised-matches-warn')
           }
-        }
 
-        // Check if pf_normalized_matches is above 1
-        pf_normalized_matches = parseFloat(rowInfo['row']['pf_normalized_matches'])
-        if (pf_normalized_matches >1 ) {
-          rowClasses.push('normalised-matches-warn')
-        }
+          // We want to highlight the number of reads without matches to known indices
+          if (rowInfo['row']['sample'] == 'unmatched') {
+            rowClasses.push('unmatched')
+          }
 
-        // We want to highlight the number of reads without matches to known indices
-        if (rowInfo['row']['sample'] == 'unmatched') {
-          rowClasses.push('unmatched')
-        }
-
-        return rowClasses.join(' ')
-      }"
-    ),
-  )
+          return rowClasses.join(' ')
+        }"
+      ),
+    )
+} else {
+  "Barcode metrics not applicable for runs without demultiplexing"
+}
 ```
 
 
