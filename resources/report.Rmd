@@ -32,43 +32,102 @@ library(formattable)
 library(plotly)
 library(colorspace)
 library(sparkline)
+library(assertthat)
 ```
 
 ```{r message=TRUE, warning=TRUE, include=FALSE}
-jsons <-
-  list.files(pattern = "*run_validation_report.json$",
-             recursive = T,
-             full.names = T) %>% lapply(read_json)
+find.json.reports <- function() {
+  pattern <- "*run_validation_report.json$"
+  filenames <- list.files('.', pattern, recursive = T, full.names = T)
+  assert_that(filenames %>% not_empty, msg = paste0("Could not find any validation files matching pattern \"", pattern, "\""))
+  for (i in seq_along(filenames)) {
+    filename <- filenames[i]
+    see_if(filename %>% is.writeable, msg = paste0("Could not read file: ", filename, "."))
+  }
 
-eventfile <-
-  list.files(pattern = "*_samples.txt$",
-             recursive = T,
-             full.names = T) %>%
-  extract(1) %>%
-  read_tsv(na = "N/A") %>%
-  mutate(row = paste0(Index, "_lane", Position %>% gsub(":.*","",.))) %>%
-  column_to_rownames("row")
+  filenames
+}
 
-runinfo <- tibble(
-  "Run"                 = jsons %>% map("run") %>% unique %>% paste(collapse = ","),
-  "Sequencing Type"     = jsons %>% map("seqtype") %>% unique %>% paste(collapse = ","),
-  "Flowcell"            = jsons %>% map("flowcell") %>% unique %>% paste(collapse=", "),
-	"Seq. Method"         = jsons %>% map("sequencing_method") %>% unique %>% paste(collapse=", "),
-	"Instrument"          = jsons %>% map("instrument") %>% unique %>% paste(collapse=", "),
-	"Total PF clusters(G)"= jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
-	"Spreads"             = jsons %>% map("spread")%>% unlist %>% round(2) %>% paste(collapse=", "),
-	"Project(s)"          = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
-	) %>% t %>% data.frame
+parse.json.reports.v1 <- function(filenames) {
+  list.of.reports <- lapply(filenames, read_json)
 
-indexinfo <- lapply(jsons, function(x) {
-  lapply(x$barcodes, function(sample_lanes) {
-    seq_along(sample_lanes) %>% lapply(function(mgi_index_num) {
-      as_tibble(sample_lanes[[mgi_index_num]])
-    }) %>% do.call(what = rbind)
-  }) %>% do.call(what = rbind)
-}) %>% do.call(what=rbind) %>%
-  select(SAMPLESHEET_NAME, LIBRARY, PROJECT, BARCODE_SEQUENCE, INDEX_NAME, INDEX1, INDEX2, ADAPTERi5, ADAPTERi7)
+  for (i in seq_along(list.of.reports)) {
+    report <- list.of.reports[[i]]
+    assert_that(report %has_name% 'lane',             msg = paste0("Could not find a lane number in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'run',               msg = paste0("Could not find a run id in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'total_pf_clusters', msg = paste0("Could not find a run id in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'instrument',        msg = paste0("Could not find instrument id in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'spread',            msg = paste0("Could not find a spread summary in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'flowcell',          msg = paste0("Could not find a flowcell id in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'seqtype',           msg = paste0("Could not find seqtype in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'total_pf_clusters', msg = paste0("Could not find a run id in report: '", filenames[[i]], "'"))
+    assert_that(report %has_name% 'sequencing_method',
+           report$sequencing_method %in% c("PAIRED_END", "SINGLE_END"),
+           msg = paste0("Could not find valid 'sequencing_method' value in report ", filenames[[i]], ". Should be 'PAIRED_END' or 'SINGLE_END'"))
+  }
 
+  list.of.reports
+}
+
+find.eventfile <- function() {
+  pattern <- "*_samples.txt$"
+  filename <- list.files('.', pattern, recursive = T, full.names = T)
+  assert_that(filename %>% not_empty, msg = paste0("Could not find any event files matching pattern \"", pattern, "\""))
+  assert_that(length(filename) < 2, msg = paste0("Found more than one event file matching pattern \"", pattern, "\""))
+
+  filename
+}
+
+parse.eventfile.v1 <- function(filename) {
+  filename %>%
+    read_tsv(
+      na = "N/A",
+      col_types = cols(
+        ProcessLUID = col_character(),
+        ProjectLUID = col_character(),
+        ProjectName = col_character(),
+        ContainerLUID = col_character(),
+        ContainerName = col_character(),
+        Position = col_character(),
+        Index = col_character(),
+        LibraryLUID = col_character(),
+        LibraryProcess = col_character(),
+        ArtifactLUIDLibNorm = col_character(),
+        ArtifactNameLibNorm = col_character(),
+        SampleLUID = col_character(),
+        SampleName = col_character(),
+        Reference = col_character(),
+        `Start Date` = col_date(format = ""),
+        `Sample Tag` = col_character(),
+        `Target Cells` = col_double(),
+        `Library Metadata ID` = col_character(),
+        Species = col_character(),
+        `UDF/Genome Size (Mb)` = col_double(),
+        Gender = col_character(),
+        `Pool Fraction` = col_double(),
+        `Capture Type` = col_character(),
+        CaptureLUID = col_character(),
+        `Capture Name` = col_character(),
+        `Capture REF_BED` = col_character(),
+        `Capture Metadata ID` = col_character(),
+        ArtifactLUIDClustering = col_character(),
+        `Library Size` = col_character(),
+        `Library Kit Name` = col_character(),
+        `Capture Kit Type` = col_character(),
+        `Capture Bait Version` = col_character(),
+        `ChIP-Seq Mark` = col_character()
+      )
+    ) %>%
+    mutate(row = paste0(Index, "_lane", Position %>% gsub(":.*", "", .))) %>%
+    column_to_rownames("row")
+}
+
+find.demux_metrics <- function() {
+  pattern <- "([0-9]).DemuxFastqs.metrics.txt"
+  filenames <- list.files('.', pattern, recursive = T, full.names = T)
+  assert_that(filenames %>% not_empty, msg = paste0("Could not find any event files matching pattern \"", pattern, "\""))
+  filenames
+}
 
 get_sample_from_full_barcode_name <- function(barcodes, libraries) {
   barcodes %>% str_split(paste0("_", libraries, "_")) %>% sapply(function(row) row[1])
@@ -80,19 +139,69 @@ get_simple_barcode_from_full_barcode_name <- function(barcodes, libraries) {
     sapply(function(row) row[2])
 }
 
-list.files("demux_metrics", full.names = TRUE) %>%
-  lapply(function(path) {
-    lane <- str_match(path, "([0-9]).DemuxFastqs.metrics.txt")[, 2]
-    read_tsv(path) %>% mutate(lane = lane)
-  }) %>%
-  do.call(what = rbind) %>%
-  mutate(
-    sample = get_sample_from_full_barcode_name(barcode_name, library_name),
-    barcode_simple = get_simple_barcode_from_full_barcode_name(barcode_name, library_name) %>% replace_na("unmatched"),
-  ) %>%
-  relocate(lane, library_name, sample, barcode_simple) %>%
-  arrange(lane, templates %>% desc()) -> barcode_metrics
+parse.demux_metrics.v1 <- function(filenames) {
+  filenames %>%
+    lapply(function(filename) {
+      assert_that(is.readable(filename))
+      lane <- str_match(filename, "([0-9]).DemuxFastqs.metrics.txt")[, 2] %>% as.integer()
+      read_tsv(
+        filename,
+        col_types = cols(
+          barcode_name = col_character(),
+          library_name = col_character(),
+          barcode = col_character(),
+          templates = col_double(),
+          pf_templates = col_double(),
+          perfect_matches = col_double(),
+          pf_perfect_matches = col_double(),
+          one_mismatch_matches = col_double(),
+          pf_one_mismatch_matches = col_double(),
+          fraction_matches = col_double(),
+          ratio_this_barcode_to_best_barcode = col_double(),
+          pf_fraction_matches = col_double(),
+          pf_ratio_this_barcode_to_best_barcode = col_double(),
+          pf_normalized_matches = col_double()
+        )
+      ) %>%
+        mutate(
+          lane = lane,
+          sample = get_sample_from_full_barcode_name(barcode_name, library_name),
+          barcode_simple = get_simple_barcode_from_full_barcode_name(barcode_name, library_name) %>% replace_na("unmatched"),
+        )
+    }) %>%
+    do.call(what=rbind) %>%
+    relocate(lane, library_name, sample, barcode_simple) %>%
+    arrange(lane, desc(templates))
+}
 ```
+
+
+```{r message=TRUE, warning=TRUE, include=FALSE}
+jsons           <- find.json.reports()  %>% parse.json.reports.v1()
+eventfile       <- find.eventfile()     %>% parse.eventfile.v1()
+barcode_metrics <- find.demux_metrics() %>% parse.demux_metrics.v1()
+
+runinfo <- tibble(
+  "Run"                 = jsons %>% map("run")               %>% unique %>% paste(collapse = ","),
+  "Sequencing Type"     = jsons %>% map("seqtype")           %>% unique %>% paste(collapse = ","),
+  "Flowcell"            = jsons %>% map("flowcell")          %>% unique %>% paste(collapse=", "),
+	"Seq. Method"         = jsons %>% map("sequencing_method") %>% unique %>% paste(collapse=", "),
+	"Instrument"          = jsons %>% map("instrument")        %>% unique %>% paste(collapse=", "),
+	"Total PF clusters(G)"= jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
+	"Spreads"             = jsons %>% map("spread")            %>% unlist %>% round(2) %>% paste(collapse=", "),
+	"Project(s)"          = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
+	) %>% t %>% data.frame
+
+indexinfo <- lapply(jsons, function(x) {
+  lapply(x$barcodes, function(sample_lanes) {
+    seq_along(sample_lanes) %>% lapply(function(mgi_index_num) {
+      as_tibble(sample_lanes[[mgi_index_num]])
+    }) %>% do.call(what = rbind)
+  }) %>% do.call(what = rbind)
+}) %>% do.call(what=rbind) %>%
+  select(SAMPLESHEET_NAME, LIBRARY, PROJECT, BARCODE_SEQUENCE, INDEX_NAME, INDEX1, INDEX2, ADAPTERi5, ADAPTERi7)
+```
+
 
 ```{r include=FALSE}
 rsmetrics = map(jsons,"run_validation")
@@ -131,9 +240,7 @@ pfreads_plot %>% ggplotly
 ```
 
 ```{r echo=FALSE}
-clusters_bulletgraph <- function(expected, observed, max) {
-  sparkline(c(expected,observed,max,0,0), type = "bullet")
-}
+clusters_bulletgraph <- function(expected, observed, max) sparkline(c(expected,observed,max,0,0), type = "bullet")
 
 rsmetrics %>%
   group_by(lane) %>%
@@ -264,7 +371,6 @@ kable(indexinfo, row.names = FALSE)
 ```
 
 ### Barcode Metrics
-
 
 ```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
 barcode_metrics %>%
