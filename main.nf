@@ -84,6 +84,5 @@ workflow {
     | GetInputs \
     | combine([[rmd_template, rmd_css]]) \
     | RenderReport \
-    | UploadRunReport \
-    | view()
+    | UploadRunReport
 }
