@@ -4,3 +4,4 @@ testing/
 .nextflow*
 .Rproj.user
 .DS_Store
+notes.md
