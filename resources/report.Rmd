@@ -192,7 +192,7 @@ parse.demux_metrics.v1 <- function(filenames) {
 }
 
 find.fqstats <- function() {
-  pattern <- "*.fqStat.txt$"
+  pattern <- "*read_[12].fq.fqStat.txt$"
   filenames <- list.files('.', pattern, recursive = T, full.names = T)
   filenames
 }
@@ -234,7 +234,7 @@ if(run.is.demultiplexed) {
   	"Instrument"            = jsons %>% map("instrument")        %>% unique %>% paste(collapse=", "),
     "Total read number"     = fqstats$ReadNum %>% sum %>% divide_by(1) %>% round(1) %>% scales::comma(),
     "Total bases (Mbp)"     = fqstats$BaseNum %>% sum %>% scales::comma(scale = 1/1e6),
-    "Total PF clusters(G)"  = jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e9) %>% round(2),
+    "Total PF clusters(M)"  = jsons %>% map("total_pf_clusters") %>% unlist %>% sum %>% divide_by(1e6) %>% scales::comma(),
   	"Spreads"               = jsons %>% map("spread") %>% unlist %>% round(2) %>% paste(collapse=", "),
   	"Project(s)"            = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
   	) %>% t %>% data.frame
@@ -247,7 +247,7 @@ if(run.is.demultiplexed) {
   	"Instrument"            = jsons %>% map("instrument")        %>% unique %>% paste(collapse=", "),
     "Total read number"     = fqstats$ReadNum %>% sum %>% divide_by(1) %>% round(1) %>% scales::comma(),
     "Total bases (Mbp)"     = fqstats$BaseNum %>% sum %>% scales::comma(scale = 1/1e6),
-    "Total PF clusters(G)"  = "N/A (run not demultiplexed)",
+    "Total PF clusters"     = "N/A (run not demultiplexed)",
   	"Spreads"               = "N/A (run not demultiplexed)",
   	"Project(s)"            = jsons %>% sapply(function(json) json$run_validation %>% map("project")) %>% unlist() %>% unique %>% paste(collapse = ", ")
   	) %>% t %>% data.frame
@@ -326,11 +326,25 @@ rsmetrics %>%
   ungroup() %>%
   mutate(
     clusters.for.sparkline = mapply(function(obs, exp, max1, max2) { list(exp=exp, obs=obs, max.per.lane=max1, max.overall=max2)}, ReadNum, index.expected, index.max.per.lane, rep(max(ReadNum), n()), SIMPLIFY = FALSE),
-    `index.% on index in lane` = ifelse(run.is.demultiplexed, `index.% on index in lane` %>% sprintf(fmt = "%.1f"), "100"),
-    `index.% of the lane` = ifelse(run.is.demultiplexed, `index.% of the lane` %>% sprintf(fmt = "%.1f"), "100%"),
     lane.composition.list = mapply(function(percentage, samples.per.lane) {list(percentage = percentage, samples.per.lane = samples.per.lane)}, `index.% on index in lane`, samples.per.lane, SIMPLIFY = FALSE),
     lane = gsub("lane", "Lane ", lane),
-  ) %>%
+  ) -> tmp.table
+
+if(run.is.demultiplexed) {
+  tmp.table %<>%
+      mutate(
+    `index.% on index in lane` = `index.% on index in lane` %>% sprintf(fmt = "%.1f"),
+    `index.% of the lane` = `index.% of the lane` %>% sprintf(fmt = "%.1f"),
+  )
+} else {
+  tmp.table %<>%
+      mutate(
+    `index.% on index in lane` = "100%",
+    `index.% of the lane` = "100%",
+  )
+}
+
+tmp.table %>%
   select(
     "Lane"                 = lane,
     "Sample name"          = SampleName,
