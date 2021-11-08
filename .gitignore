@@ -1,6 +1,6 @@
 work/
-test/
-testing/
+./test/
+./testing/
 .nextflow*
 .Rproj.user
 .DS_Store
