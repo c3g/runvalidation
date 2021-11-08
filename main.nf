@@ -67,6 +67,10 @@ process UploadRunReport {
     input:
     tuple val(run_id), path(report)
 
+    when:
+    !params.noupload
+
+    script:
     """
     sftp -P 22004 sftp_p25@sftp-arbutus.genap.ca <<EOF
     put $report /datahub297/MGI_validation/2021/
