@@ -3,8 +3,8 @@ nextflow.enable.dsl=2
 
 import sun.nio.fs.UnixPath
 
-params.template = "$baseDir/resources/report.Rmd"
-params.css = "$baseDir/resources/style.css"
+params.template = "$baseDir/assets/report.Rmd"
+params.css = "$baseDir/assets/style.css"
 params.eventfiles = "/lb/robot/research/MGISeq/dnbseqg400/*/*/*.txt"
 
 def get_run_id(UnixPath path) {
