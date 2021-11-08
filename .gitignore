@@ -1,9 +1,10 @@
 work/
 ./test/
-./testing/
+testing/
 .nextflow*
 .Rproj.user
 .DS_Store
 notes.md
 resources/report.knit.md
 resources/report.utf8.md
+assets/report.knit.md
