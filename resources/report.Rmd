@@ -455,6 +455,7 @@ column_definitions = list(
 table.data %>% reactable(
   columns = column_definitions,
   rownames = FALSE,
+  pagination = FALSE,
   class = "samples-table",
   theme = reactableTheme(
     cellStyle = list(
