@@ -347,8 +347,7 @@ if(run.is.demultiplexed) {
 tmp.table %>%
   select(
     "Lane"                 = lane,
-    "
-    "          = SampleName,
+    "Sample name"          = SampleName,
     "Barcode name"         = index.Barcode,
     "Clusters Graph"       = clusters.for.sparkline,
     "Clusters"             = ReadNum,
