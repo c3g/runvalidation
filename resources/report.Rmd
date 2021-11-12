@@ -347,7 +347,8 @@ if(run.is.demultiplexed) {
 tmp.table %>%
   select(
     "Lane"                 = lane,
-    "Sample name"          = SampleName,
+    "
+    "          = SampleName,
     "Barcode name"         = index.Barcode,
     "Clusters Graph"       = clusters.for.sparkline,
     "Clusters"             = ReadNum,
@@ -367,7 +368,7 @@ column_definitions = list(
     width = 70
   ),
   "Sample name" = colDef(
-    minWidth = tmp.samplename.max * 8,
+    minWidth = 100 + tmp.samplename.max * 6,
     cell = function(value, index) {
       div(
         class = "sample",
