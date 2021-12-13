@@ -33,7 +33,7 @@ process GetInputs {
 process RenderReport {
     tag {run_id}
     cache 'deep'
-    module 'mugqic/pandoc'
+    module 'mugqic/pandoc/2.16.1'
     module 'mugqic/R_Bioconductor/4.1.0_3.13'
     executor 'local'
 
