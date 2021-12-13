@@ -49,6 +49,7 @@ has.cluster.counts <- list.files(pattern = "*run_validation_report.json$", recur
   all()
 
 run.is.demultiplexed <- has.demux.metrics && has.cluster.counts
+run.is.demultiplexed <- TRUE
 ```
 
 
@@ -133,7 +134,8 @@ parse.eventfile.v1 <- function(filename) {
     mutate(
       row = paste0(Index, "_lane", Position %>% gsub(":.*", "", .)),
       Lane = row %>% str_split("_lane") %>% sapply(tail, n=1) %>% as.integer(),
-      Species = str_replace(Species, "N/A", "Not provided")
+      Species = str_replace(Species, "N/A", "Not provided"),
+      Species = replace_na(Species, "Not provided")
     ) %>%
     column_to_rownames("row")
 }
@@ -192,7 +194,7 @@ parse.demux_metrics.v1 <- function(filenames) {
 }
 
 find.fqstats <- function() {
-  pattern <- "*read_[12].fq.fqStat.txt$"
+  pattern <- "*.fqStat.txt$"
   filenames <- list.files('.', pattern, recursive = T, full.names = T)
   filenames
 }
@@ -206,14 +208,16 @@ parse.fqstats <- function(filenames) {
         pivot_wider(names_from = 'key') %>%
         mutate(
           Lane = str_match(filename, "_L([0-9]+)_")[, 2],
-          Read = str_match(Name, "read_([12])")[, 2]
+          Read = str_match(Name, ".*_L[0-9]+_.*_([12]).fq.gz")[, 2],
+          Sample = str_match(Name, ".*_L[0-9]+_(.*)_[12].fq.gz")[, 2]
         )
     }) %>%
     do.call(what = rbind) %>%
     relocate(Lane, Read) %>%
     select(-Name) %>%
     arrange(Lane, Read) %>%
-    type.convert()
+    type.convert() %>%
+    filter(!is.na(Read))
 }
 ```
 
@@ -221,7 +225,7 @@ parse.fqstats <- function(filenames) {
 jsons           <- find.json.reports()  %>% parse.json.reports.v1()
 eventfile       <- find.eventfile()     %>% parse.eventfile.v1()
 fqstats         <- find.fqstats()       %>% parse.fqstats()
-if(run.is.demultiplexed) barcode_metrics <- find.demux_metrics() %>% parse.demux_metrics.v1()
+#if(run.is.demultiplexed) barcode_metrics <- find.demux_metrics() %>% parse.demux_metrics.v1()
 ```
 
 ```{r message=TRUE, warning=TRUE, include=FALSE}
@@ -367,7 +371,7 @@ column_definitions = list(
     width = 70
   ),
   "Sample name" = colDef(
-    minWidth = 100 + tmp.samplename.max * 6,
+    minWidth = 100 + tmp.samplename.max * 5,
     cell = function(value, index) {
       div(
         class = "sample",
@@ -378,14 +382,14 @@ column_definitions = list(
   ),
   "Library process" = colDef(show = FALSE),
   "Barcode name" = colDef(
+    minWidth = 110,
     cell = function(value, index) {
-      div(
-        class = "barcode-name", value
-      )
+      div(class = "barcode-name", value)
     }
   ),
   "Lane composition" = colDef(
-    # minWidth = 130,
+    show = FALSE,
+    minWidth = 130,
     cell = function(lst) {
       value <- lst$percentage %>% as.numeric()
       expected <- 100 / lst$samples.per.lane
@@ -396,13 +400,13 @@ column_definitions = list(
     }
   ),
   "Clusters" = colDef(
-    # minWidth = 150,
+    #minWidth = 100,
     cell = function(v) { scales::comma(v)}
   ),
   "Clusters Graph" = colDef(
     show = FALSE,
     name = "",
-    # width = 100,
+    width = 100,
     sortable = FALSE,
     cell = function(l) {
       sparkline(
@@ -417,7 +421,7 @@ column_definitions = list(
     }
   ),
   "Blast - 1st hit" = colDef(
-    minWidth = 150,
+    minWidth = 100,
     name = "Blast hits",
     cell = function(value, index) {
       match.1st <- str_match(value, "(.*) (\\(\\d+\\))")
@@ -446,7 +450,7 @@ column_definitions = list(
   "Blast - 2nd hit"   = colDef(show = FALSE),
   "Blast - 3rd hit"   = colDef(show = FALSE),
   "Library process"   = colDef(minWidth = 250),
-  "Expected species"  = colDef(minWidth = 300),
+  "Expected species"  = colDef(minWidth = 100),
   "Blast - 1st hit"   = colDef(minWidth = 200),
   "Blast - 2nd hit"   = colDef(minWidth = 200),
   "Blast - 3rd hit"   = colDef(minWidth = 200)
@@ -497,7 +501,7 @@ if(run.is.demultiplexed) {
 ### Barcode Metrics
 
 ```{r, fig.dim=c(8, 3),echo=F,messages=F,warnings=F}
-if(run.is.demultiplexed) {
+if(FALSE) {
   barcode_metrics %>%
     mutate(
       sample = as.factor(sample) %>% fct_relevel("unmatched", after = Inf),
@@ -583,7 +587,7 @@ if(run.is.demultiplexed) {
       ),
     )
 } else {
-  "Barcode metrics not applicable for runs without demultiplexing"
+  "Barcode metrics not available"
 }
 ```
 
