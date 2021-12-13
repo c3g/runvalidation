@@ -1,0 +1,120 @@
+{
+    "lane": "4", 
+    "run": "10094MG01B", 
+    "run_validation": [
+        {
+            "index": null, 
+            "project": "RAG1329", 
+            "sample": "HiC04-SaFo_RAG1329A3-1", 
+            "qc": {
+                "avgQual": "35.706364", 
+                "duplicateRate": "50.439644"
+            }, 
+            "sample_tag": null, 
+            "blast": {
+                "3rd_hit": "PREDICTED (788)", 
+                "1st_hit": "Salmo_trutta (10744)", 
+                "2nd_hit": "Coregonus_sp. (3234)"
+            }, 
+            "alignment": null
+        }
+    ], 
+    "instrument": "R2130400190016", 
+    "flowcell": "V300085399", 
+    "steps": [
+        {
+            "jobs": [
+                {
+                    "command": "mkdir -p /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/qc && \\\ntouch /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/qc && \\\njava -XX:ParallelGCThreads=12 -Djava.awt.headless=true -Xmx60G -jar $BVATOOLS_JAR \\\n  readsqc  \\\n  --regionName HiC04-SaFo_RAG1329A3-1_1_L004 \\\n  --type FASTQ \\\n  --output /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/qc \\\n  --read1 /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001.fastq.gz \\\n  --read2 /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001.fastq.gz \\\n  --threads 4", 
+                    "input_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001.fastq.gz", 
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001.fastq.gz"
+                    ], 
+                    "modules": [
+                        "mugqic/java/openjdk-jdk1.8.0_72", 
+                        "mugqic/bvatools/1.6"
+                    ], 
+                    "job_name": "qc.HiC04-SaFo_RAG1329A3-1.qc.10094MG01B.4", 
+                    "output_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/qc/mpsQC_HiC04-SaFo_RAG1329A3-1_1_L004_stats.xml"
+                    ]
+                }
+            ], 
+            "step_name": "qc_graphs"
+        }, 
+        {
+            "jobs": [
+                {
+                    "command": "mkdir -p /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2 && \\\ntouch /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2 && \\\nmkdir -p /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2.tmp && \\\nfastqc \\\n  --outdir /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2 \\\n  --threads 10 \\\n   \\\n  --format fastq \\\n  --extract \\\n  --dir /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2.tmp \\\n  /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001.fastq.gz \\\n  && rm -r /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2.tmp", 
+                    "input_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001.fastq.gz"
+                    ], 
+                    "modules": [
+                        "mugqic/fastqc/0.11.6.devel", 
+                        "mugqic/java/openjdk-jdk1.8.0_72"
+                    ], 
+                    "job_name": "fastqc.HiC04-SaFo_RAG1329A3-1_R2..10094MG01B.4", 
+                    "output_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001_fastqc.zip", 
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001_fastqc.html", 
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R2/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001_fastqc/fastqc_data.txt"
+                    ]
+                }, 
+                {
+                    "command": "mkdir -p /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1 && \\\ntouch /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1 && \\\nmkdir -p /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1.tmp && \\\nfastqc \\\n  --outdir /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1 \\\n  --threads 10 \\\n   \\\n  --format fastq \\\n  --extract \\\n  --dir /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1.tmp \\\n  /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001.fastq.gz \\\n  && rm -r /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1.tmp", 
+                    "input_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001.fastq.gz"
+                    ], 
+                    "modules": [
+                        "mugqic/fastqc/0.11.6.devel", 
+                        "mugqic/java/openjdk-jdk1.8.0_72"
+                    ], 
+                    "job_name": "fastqc.HiC04-SaFo_RAG1329A3-1_R1..10094MG01B.4", 
+                    "output_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001_fastqc.zip", 
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001_fastqc.html", 
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/fastqc.R1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001_fastqc/fastqc_data.txt"
+                    ]
+                }
+            ], 
+            "step_name": "fastqc"
+        }, 
+        {
+            "jobs": [
+                {
+                    "command": "mkdir -p /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Blast_sample && \\\ntouch /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Blast_sample && \\\nrm -f /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Blast_sample/HiC04-SaFo_RAG1329A3-1_1_L004.R1.RDP.blastHit_20MF_species.txt && runBlast.sh 10000 /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Blast_sample/HiC04-SaFo_RAG1329A3-1_1_L004 /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001.fastq.gz /nb/Research/processingmgiscratch/processing/V300085399_10094MG01B/L04/Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001.fastq.gz", 
+                    "input_files": [
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R1_001.fastq.gz", 
+                        "../Unaligned.4/Project_RAG1329/Sample_HiC04-SaFo_RAG1329A3-1/HiC04-SaFo_RAG1329A3-1_S1_L004_R2_001.fastq.gz"
+                    ], 
+                    "modules": [
+                        "mugqic/mugqic_tools/2.7.0", 
+                        "mugqic/blast/2.10.0+"
+                    ], 
+                    "job_name": "blast.HiC04-SaFo_RAG1329A3-1.blast.10094MG01B.4", 
+                    "output_files": [
+                        "../Unaligned.4/Blast_sample/HiC04-SaFo_RAG1329A3-1_1_L004.R1.RDP.blastHit_20MF_species.txt"
+                    ]
+                }
+            ], 
+            "step_name": "blast"
+        }, 
+        {
+            "jobs": [], 
+            "step_name": "align"
+        }, 
+        {
+            "jobs": [], 
+            "step_name": "picard_mark_duplicates"
+        }, 
+        {
+            "jobs": [], 
+            "step_name": "metrics"
+        }
+    ], 
+    "seqtype": "dnbseqg400", 
+    "sequencing_method": "PAIRED_END", 
+    "barcodes": {
+        "HiC04-SaFo_RAG1329A3-1": null
+    }
+}
